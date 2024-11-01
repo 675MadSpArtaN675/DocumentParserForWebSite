@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Text.RegularExpressions;
 using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Office.CustomUI;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
@@ -64,10 +65,68 @@ namespace DocsParserLib
             return compets;
         }
 
-        public void GetQuestions()
+
+        public List<Question> GetQuestions()
         {
-            string[] filters = { "перечень", "результатов", "вопросы" };
+            string[] filters = { "результатов", "компетенций", "вопросы" };
+            Regex pattern = CreateFilterPattern(filters),
+                  pattern_compet = CreateFilterPattern(compets.Select(x => $"({x.Name})").ToArray());
+
+            List<Question> _questions = new List<Question>();
+
             Table? question_table = FindTableByTitle(filters);
+            var par_1 = question_table.PreviousSibling<Paragraph>();
+            var par_2 = par_1?.PreviousSibling<Paragraph>();
+
+            while (question_table is not null) 
+            {
+                var competetion_match = pattern_compet.Match(GetTitleRow(question_table).InnerText);
+                
+                if (!competetion_match.Success)
+                    break;
+
+                if (pattern.Matches($"{par_1.InnerText} {par_2.InnerText}").Count == filters.Length)
+                {
+                    var questions_cells = question_table.Elements<TableRow>().Skip(1).SelectMany(n => n.Elements<TableCell>());
+
+                    foreach (var item in questions_cells)
+                    {
+                        int question_num = 1;
+                        foreach (var item1 in item.Elements<Paragraph>())
+                        {
+                            string question_description = item1.InnerText;
+
+                            if (question_description.Length > 0)
+                            {
+                                Question question = new Question(question_num, competetion_match.Value, question_description);
+                                _questions.Add(question);
+
+                                question_num++;
+                            }
+                        }
+
+                    }
+
+                }
+                else
+                    break;
+
+                question_table = question_table.NextSibling<Table>();
+                FindPrevTitle(in question_table, out par_1, out par_2);
+                /*question_table = question_table.NextSibling<Table>();
+
+                par_2 = question_table.PreviousSibling<Paragraph>();
+                par_1 = par_2.PreviousSibling<Paragraph>();
+
+                while (par_1.InnerText == "" || par_2.InnerText == "")
+                {
+                    par_2 = par_2.PreviousSibling<Paragraph>();
+                    par_1 = par_2.PreviousSibling<Paragraph>();
+                }*/
+            }
+
+            return _questions;
+
         }
 
         private Competetion? CreateCompetetion(IEnumerable<TableRow> row)
@@ -124,6 +183,18 @@ namespace DocsParserLib
             return result;
         }
 
+        private void FindPrevTitle(in Table? question_table, out Paragraph? par_1, out Paragraph? par_2)
+        {
+            par_2 = question_table.PreviousSibling<Paragraph>();
+            par_1 = par_2.PreviousSibling<Paragraph>();
+
+            while (par_1.InnerText == "" || par_2.InnerText == "")
+            {
+                par_2 = par_2.PreviousSibling<Paragraph>();
+                par_1 = par_2.PreviousSibling<Paragraph>();
+            }
+        }
+
         private Table? FindTableByTitle(string[] filters)
         {
             Regex regex = CreateFilterPattern(filters);
@@ -155,6 +226,11 @@ namespace DocsParserLib
         {
             IEnumerable<Paragraph> paragraphs;
             return false;
+        }
+
+        private TableRow GetTitleRow(Table table)
+        {
+            return table.Elements<TableRow>().ElementAt(0);
         }
 
         private Regex CreateFilterPattern(string[] filters)

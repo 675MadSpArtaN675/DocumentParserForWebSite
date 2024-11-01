@@ -6,13 +6,19 @@ namespace DocsParserLib
     public struct Question
     {
         public int Number;
-        public int CompetentionNum;
+        public string CompetentionName;
         public string Description;
 
-        public Question(int _num, string _descr)
+        public Question(int _num, string _comp_name, string _descr)
         { 
             Number = _num;
+            CompetentionName = _comp_name;
             Description = _descr;
+        }
+
+        public override string ToString()
+        {
+            return $"Номер: {Number}\nНазвание компетенции: {CompetentionName}\nОписание вопроса: {Description}\n";
         }
     }
 
