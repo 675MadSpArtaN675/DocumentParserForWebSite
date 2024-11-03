@@ -9,44 +9,63 @@ namespace DocsParserLib
 {
     internal class Document
     {
-        public Document()
-        {
+        private WordprocessingDocument _wordDoc;
+        private MainDocumentPart? _mainPart;
+        private Body? _body;
+        private Document? _document;
 
+        public MainDocumentPart? MainPart
+        {
+            get => _mainPart;
+        }
+        public Document? DocumentFull
+        {
+            get => _document;
+        }
+
+        public Body? DocBody
+        {
+            get => _body;
+        }
+
+        public Document(string filename)
+        {
+            _wordDoc = WordprocessingDocument.Open(filename, false);
+            _mainPart = _wordDoc.MainDocumentPart;
+
+            if (_mainPart is null || _mainPart.Document is null || _mainPart.Document.Body is null)
+                throw new MainPartNotFound();
+
+            _body = _mainPart.Document.Body;
+        }
+
+        ~Document()
+        {
+            _wordDoc.Dispose();
         }
     }
 
+    /* 
+
+    private WordprocessingDocument _wordDoc;
+    private MainDocumentPart? main_part;
+    private Body _Body;
+
+    */
+
     public class DocParser
     {
-        private WordprocessingDocument _wordDoc;
-        private MainDocumentPart? main_part;
-        private Body _Body;
-
+        private Document _doc;
+        
         private IEnumerable<Table> tables;
         private List<Competetion> compets;
 
-        public MainDocumentPart? MainPartOfDoc { 
-            get {
-                return main_part;
-            }
-        }
-
         public DocParser(string filename)
         {
-            _wordDoc = WordprocessingDocument.Open(filename, false);
-            main_part = _wordDoc.MainDocumentPart;
+            _doc = new Document(filename);
 
-            if (main_part is null || main_part.Document is null || main_part.Document.Body is null)
-                throw new MainPartNotFound();
-
-            _Body = main_part.Document.Body;
-
-            tables = main_part.Document.Body.Elements<Table>();
+            tables = _doc.DocBody.Elements<Table>();
             compets = new List<Competetion>();
-        }
-
-        ~DocParser()
-        {
-            _wordDoc.Dispose();
         }
 
         public List<Competetion>? GetCompetetions()
@@ -290,9 +309,9 @@ namespace DocsParserLib
 
         private Table? FindTableByTitle(string[] filters)
         {
-            if (_Body is null) return null;
+            if (_doc.DocBody is null) return null;
 
-            var paragraphs = _Body.Elements<Paragraph>().ToArray();
+            var paragraphs = _doc.DocBody.Elements<Paragraph>().ToArray();
             Regex title_pattern = CreateFilterPattern(filters);
 
             foreach (var paragraph in paragraphs)
