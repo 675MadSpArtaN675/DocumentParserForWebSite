@@ -58,6 +58,8 @@ namespace DocsParserLib
         private Document _doc;
         
         private List<Competention> compets;
+        private List<Question> _questions;
+        private List<PracticTask> _practicTasks;
 
         public DocParser(string filename)
         {
