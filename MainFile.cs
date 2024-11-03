@@ -74,11 +74,16 @@ namespace DocsParserLib
         {
             string[] filters = { "результатов", "компетенций", "вопросы" };
 
-            return ReadTable<Question>(filters, (competetion_match, question_table, _questions) =>
+            return ReadTable<Question>(filters, (question_table, _questions) =>
             {
-                IEnumerable<TableCell> questions_cells = question_table.Elements<TableRow>().Skip(1).SelectMany(n => n.Elements<TableCell>());
+                IEnumerable<TableRow> table_rows = question_table.Elements<TableRow>();
+                IEnumerable<TableCell> questions_cells = table_rows.Skip(1).SelectMany(n => n.Elements<TableCell>());
 
-                ReadQuestions(_questions, questions_cells, competetion_match);
+                string title = table_rows.ElementAt(0).InnerText.Trim();
+                string? title_match = GetCompetitionNameStr(title);
+                Competetion? comp = GetCompetetionByName(title_match);
+
+                ReadQuestions(_questions, questions_cells, comp ?? new Competetion());
             });
 
         }
@@ -97,7 +102,7 @@ namespace DocsParserLib
             string[] filters = ["Практические", "задания", "результатов"];
 
             var result_tasks = ReadTable<PracticTask>(filters, 
-                (competetion_match, question_table, tasks) => {
+                (question_table, tasks) => {
                     List<TableRow> tasks_rows = question_table.Elements<TableRow>().ToList();
 
                     int question_num = 1;
@@ -113,9 +118,8 @@ namespace DocsParserLib
                             continue;
                         }
 
-                        Console.WriteLine(PracticeTaskRowParse(row, question_num, comp ?? new Competetion()));
+                        tasks.Add(PracticeTaskRowParse(row, question_num, comp ?? new Competetion()));
                         question_num++;
-                        //tasks.Add(new PracticTask(0, new Competetion(1, ""), row.InnerText));
                     }
             });
 
@@ -149,19 +153,20 @@ namespace DocsParserLib
             return task;
         }
 
-        public string? GetCompetitionNameStr(string title_text)
+        private string? GetCompetitionNameStr(string title_text)
         {
             Regex comp_pat = new Regex(@"([А-Я]{2}-\d+)\s*");
             Match match = comp_pat.Match(title_text.Trim());
 
             if (match.Success && match.Value != "")
-                return match.Value;
+                return match.Value.Trim();
 
             return null;
         }
 
         private Competetion? GetCompetetionByName(string name)
         {
+            Console.WriteLine($"A{name}A");
             try
             {
                 return compets.First(n => n.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase));
@@ -173,11 +178,10 @@ namespace DocsParserLib
             
         }
 
-        private List<T> ReadTable<T>(string[] filters, Action<Match?, Table?, List<T>> read_rows)
+        private List<T> ReadTable<T>(string[] filters, Action<Table?, List<T>> read_rows)
         {
-            Regex pattern = CreateFilterPattern(filters),
-                  pattern_compet = CreateFilterPattern(compets.Select(x => $"{x.Name}").ToArray());
-
+            Regex pattern = CreateFilterPattern(filters);
+                  
             List<T> result = new List<T>();
 
             Table? question_table = FindTableByTitle(filters);
@@ -186,15 +190,10 @@ namespace DocsParserLib
 
             while (question_table is not null)
             {
-                Match? competetion_match = pattern_compet.Match(GetTitleRow(question_table).InnerText);
-
-                if (!competetion_match.Success)
-                    break;
-
                 if (pattern.Matches($"{par_1.InnerText} {par_2.InnerText}").Count == filters.Length)
                 {
                     //! List<T> question_list, Match pattern, string filters
-                    read_rows(competetion_match, question_table, result);
+                    read_rows(question_table, result);
                 }
                 else
                     break;
@@ -274,7 +273,7 @@ namespace DocsParserLib
             }
         }
 
-        public Table? FindTableByTitle(string[] filters)
+        private Table? FindTableByTitle(string[] filters)
         {
             if (main_part.Document.Body is null) return null;
 
@@ -301,7 +300,7 @@ namespace DocsParserLib
             return null;
         }
 
-        private void ReadQuestions(List<Question> questions_list, IEnumerable<TableCell> questions_cells, Match? competetion_match)
+        private void ReadQuestions(List<Question> questions_list, IEnumerable<TableCell> questions_cells, Competetion competention)
         {
             foreach (var item in questions_cells)
             {
@@ -312,7 +311,7 @@ namespace DocsParserLib
 
                     if (question_description.Length > 0)
                     {
-                        Question question = new Question(question_num, competetion_match.Value, question_description);
+                        Question question = new Question(question_num, competention, question_description);
                         questions_list.Add(question);
 
                         question_num++;
@@ -341,7 +340,7 @@ namespace DocsParserLib
             return table.Elements<TableRow>().ElementAt(0);
         }
 
-        public Regex CreateFilterPattern(string[] filters)
+        private Regex CreateFilterPattern(string[] filters)
         {
             string pat = string.Join('|', filters.Select(n => $"({n})"));
             return new Regex(pat, RegexOptions.IgnoreCase);
