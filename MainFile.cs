@@ -7,10 +7,19 @@ using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace DocsParserLib
 {
+    internal class Document
+    {
+        public Document()
+        {
+
+        }
+    }
+
     public class DocParser
     {
         private WordprocessingDocument _wordDoc;
         private MainDocumentPart? main_part;
+        private Body _Body;
 
         private IEnumerable<Table> tables;
         private List<Competetion> compets;
@@ -26,8 +35,10 @@ namespace DocsParserLib
             _wordDoc = WordprocessingDocument.Open(filename, false);
             main_part = _wordDoc.MainDocumentPart;
 
-            if (main_part is null || main_part.Document.Body is null)
+            if (main_part is null || main_part.Document is null || main_part.Document.Body is null)
                 throw new MainPartNotFound();
+
+            _Body = main_part.Document.Body;
 
             tables = main_part.Document.Body.Elements<Table>();
             compets = new List<Competetion>();
@@ -38,18 +49,16 @@ namespace DocsParserLib
             _wordDoc.Dispose();
         }
 
-        public void Parse()
-        {
-            
-        }
-
-        public List<Competetion> GetCompetetions()
+        public List<Competetion>? GetCompetetions()
         {
             if (compets.Count > 0)
                 return compets;
 
             string[] filters_lines = { "ПЕРЕЧЕНЬ", "ПЛАНИРУЕМЫХ", "РЕЗУЛЬТАТОВ"};
-            Table table = FindTableByTitle(filters_lines);
+            Table? table = FindTableByTitle(filters_lines);
+
+            if (table is null)
+                return null;
 
             IEnumerable<TableRow> competetion_table_rows = table.Elements<TableRow>();
 
@@ -70,7 +79,7 @@ namespace DocsParserLib
             return compets;
         }
 
-        public List<Question> GetQuestions()
+        public List<Question>? GetQuestions()
         {
             string[] filters = { "результатов", "компетенций", "вопросы" };
 
@@ -178,19 +187,23 @@ namespace DocsParserLib
             
         }
 
-        private List<T> ReadTable<T>(string[] filters, Action<Table?, List<T>> read_rows)
+        private List<T>? ReadTable<T>(string[] filters, Action<Table?, List<T>> read_rows)
         {
             Regex pattern = CreateFilterPattern(filters);
                   
             List<T> result = new List<T>();
 
             Table? question_table = FindTableByTitle(filters);
+
+            if (question_table is null)
+                return null;
+
             var par_1 = question_table.PreviousSibling<Paragraph>();
             var par_2 = par_1?.PreviousSibling<Paragraph>();
 
             while (question_table is not null)
             {
-                if (pattern.Matches($"{par_1.InnerText} {par_2.InnerText}").Count == filters.Length)
+                if (pattern.Matches($"{par_1?.InnerText} {par_2?.InnerText}").Count == filters.Length)
                 {
                     //! List<T> question_list, Match pattern, string filters
                     read_rows(question_table, result);
@@ -200,8 +213,7 @@ namespace DocsParserLib
 
                 question_table = question_table.NextSibling<Table>();
 
-                if (question_table is not null)
-                    FindPrevTitle(in question_table, out par_1, out par_2);
+                FindPrevTitle(in question_table, ref par_1, ref par_2);
             }
 
             return result;
@@ -261,26 +273,28 @@ namespace DocsParserLib
             return result;
         }
 
-        private void FindPrevTitle(in Table? question_table, out Paragraph? par_1, out Paragraph? par_2)
+        private void FindPrevTitle(in Table? question_table, ref Paragraph? par_1, ref Paragraph? par_2)
         {
-            par_2 = question_table.PreviousSibling<Paragraph>();
-            par_1 = par_2.PreviousSibling<Paragraph>();
-
-            while (par_1.InnerText == "" || par_2.InnerText == "")
+            if (question_table is not null)
             {
-                par_2 = par_2.PreviousSibling<Paragraph>();
-                par_1 = par_2.PreviousSibling<Paragraph>();
+                par_2 = question_table.PreviousSibling<Paragraph>();
+                par_1 = par_2?.PreviousSibling<Paragraph>();
+
+                while (par_1.InnerText == "" || par_2.InnerText == "")
+                {
+                    par_2 = par_2.PreviousSibling<Paragraph>();
+                    par_1 = par_2.PreviousSibling<Paragraph>();
+                }
             }
         }
 
         private Table? FindTableByTitle(string[] filters)
         {
-            if (main_part.Document.Body is null) return null;
+            if (_Body is null) return null;
 
-            var paragraphs = main_part.Document.Body.Elements<Paragraph>().ToArray();
+            var paragraphs = _Body.Elements<Paragraph>().ToArray();
             Regex title_pattern = CreateFilterPattern(filters);
 
-            int i = 0;
             foreach (var paragraph in paragraphs)
             {
                 string par_text = UnionRuns(paragraph);
