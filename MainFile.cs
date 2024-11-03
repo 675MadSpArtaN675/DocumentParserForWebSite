@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Office.CustomUI;
+using DocumentFormat.OpenXml.Office.SpreadSheetML.Y2023.MsForms;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
@@ -15,6 +16,12 @@ namespace DocsParserLib
 
         private IEnumerable<Table> tables;
         private List<Competetion> compets;
+
+        public MainDocumentPart? MainPartOfDoc { 
+            get {
+                return main_part;
+            }
+        }
 
         public DocParser(string filename)
         {
@@ -65,68 +72,80 @@ namespace DocsParserLib
             return compets;
         }
 
-
         public List<Question> GetQuestions()
         {
             string[] filters = { "результатов", "компетенций", "вопросы" };
-            Regex pattern = CreateFilterPattern(filters),
-                  pattern_compet = CreateFilterPattern(compets.Select(x => $"({x.Name})").ToArray());
 
-            List<Question> _questions = new List<Question>();
+            return ReadTable<Question>(filters, (competetion_match, question_table, _questions) =>
+            {
+                IEnumerable<TableCell> questions_cells = question_table.Elements<TableRow>().Skip(1).SelectMany(n => n.Elements<TableCell>());
+
+                ReadQuestions(_questions, questions_cells, competetion_match);
+            });
+
+        }
+
+        // Action<
+        // Table? - откуда считываем строки
+        // List<Question> - куда сохранять результат
+        // Match? - результат сравнения шаблона заголовка нужной таблицы
+        // (Для какой компетенции предназначено)
+        // >
+
+        // Предупреждение: Данная функция сделана для чтения вопросов и практических заданий
+        
+        public List<PracticTask> GetPracticTasks()
+        {
+            string[] filters = ["Практические", "задания", "результатов"];
+
+            var result_tasks = ReadTable<PracticTask>(filters, 
+                (competetion_match, question_table, tasks) => {
+                    List<TableRow> tasks_rows = question_table.Elements<TableRow>().Skip(1).ToList();
+
+                    foreach (TableRow row in tasks_rows)
+                    {
+                        Console.WriteLine(row.InnerText);
+                        tasks.Add(new PracticTask(0, 0, row.InnerText));
+                    }
+            });
+
+
+
+
+            return result_tasks;
+        }
+
+        private List<T> ReadTable<T>(string[] filters, Action<Match?, Table?, List<T>> read_rows)
+        {
+            Regex pattern = CreateFilterPattern(filters),
+                  pattern_compet = CreateFilterPattern(compets.Select(x => $"{x.Name}").ToArray());
+
+            List<T> result = new List<T>();
 
             Table? question_table = FindTableByTitle(filters);
             var par_1 = question_table.PreviousSibling<Paragraph>();
             var par_2 = par_1?.PreviousSibling<Paragraph>();
 
-            while (question_table is not null) 
+            while (question_table is not null)
             {
-                var competetion_match = pattern_compet.Match(GetTitleRow(question_table).InnerText);
-                
+                Match? competetion_match = pattern_compet.Match(GetTitleRow(question_table).InnerText);
+
                 if (!competetion_match.Success)
                     break;
 
                 if (pattern.Matches($"{par_1.InnerText} {par_2.InnerText}").Count == filters.Length)
                 {
-                    var questions_cells = question_table.Elements<TableRow>().Skip(1).SelectMany(n => n.Elements<TableCell>());
-
-                    foreach (var item in questions_cells)
-                    {
-                        int question_num = 1;
-                        foreach (var item1 in item.Elements<Paragraph>())
-                        {
-                            string question_description = item1.InnerText;
-
-                            if (question_description.Length > 0)
-                            {
-                                Question question = new Question(question_num, competetion_match.Value, question_description);
-                                _questions.Add(question);
-
-                                question_num++;
-                            }
-                        }
-
-                    }
-
+                    //! List<T> question_list, Match pattern, string filters
+                    read_rows(competetion_match, question_table, result);
                 }
                 else
                     break;
 
                 question_table = question_table.NextSibling<Table>();
                 FindPrevTitle(in question_table, out par_1, out par_2);
-                /*question_table = question_table.NextSibling<Table>();
-
-                par_2 = question_table.PreviousSibling<Paragraph>();
-                par_1 = par_2.PreviousSibling<Paragraph>();
-
-                while (par_1.InnerText == "" || par_2.InnerText == "")
-                {
-                    par_2 = par_2.PreviousSibling<Paragraph>();
-                    par_1 = par_2.PreviousSibling<Paragraph>();
-                }*/
             }
 
-            return _questions;
-
+            return result;
         }
 
         private Competetion? CreateCompetetion(IEnumerable<TableRow> row)
@@ -195,37 +214,66 @@ namespace DocsParserLib
             }
         }
 
-        private Table? FindTableByTitle(string[] filters)
+        public Table? FindTableByTitle(string[] filters)
         {
-            Regex regex = CreateFilterPattern(filters);
+            if (main_part.Document.Body is null) return null;
 
-            var bles = main_part?.Document?.Body?.Elements<Paragraph>().ElementAt(0);
-            var now_par = bles?.NextSibling<Paragraph>();
+            var paragraphs = main_part.Document.Body.Elements<Paragraph>().ToArray();
+            Regex title_pattern = CreateFilterPattern(filters);
 
-            while (now_par is not null)
+            int i = 0;
+            foreach (var paragraph in paragraphs)
             {
-                string title = "";
-                now_par = now_par?.NextSibling<Paragraph>();
+                string par_text = UnionRuns(paragraph);
 
-                if (now_par is not null)
-                {
-                    var next_paragraph = now_par?.NextSibling<Paragraph>();
+                if (title_pattern.Matches(par_text).Count() == filters.Length)
+                    return paragraph.NextSibling<Table>();
 
-                    title = now_par?.InnerText.Trim() + " " + next_paragraph?.InnerText.Trim();
-                    var matches = regex.Matches(title);
+                Paragraph? next_par = paragraph.NextSibling<Paragraph>();
+                string par_text_2 = UnionRuns(next_par);
 
-                    if (matches.Count == filters.Length)
-                        return now_par?.NextSibling<Table>();
-                }
+                par_text += " " + par_text_2;
+
+                if (title_pattern.Matches(par_text).Count() == filters.Length)
+                    return next_par?.NextSibling<Table>();
             }
 
             return null;
         }
 
-        private bool FindTableByColumn(string column)
+        private void ReadQuestions(List<Question> questions_list, IEnumerable<TableCell> questions_cells, Match? competetion_match)
         {
-            IEnumerable<Paragraph> paragraphs;
-            return false;
+            foreach (var item in questions_cells)
+            {
+                int question_num = 1;
+                foreach (var item1 in item.Elements<Paragraph>())
+                {
+                    string question_description = item1.InnerText;
+
+                    if (question_description.Length > 0)
+                    {
+                        Question question = new Question(question_num, competetion_match.Value, question_description);
+                        questions_list.Add(question);
+
+                        question_num++;
+                    }
+                }
+
+            }
+        }
+
+        private string UnionRuns(Paragraph? paragraph)
+        {
+            if (paragraph == null) return "";
+
+            var runs = paragraph.Elements<Run>();
+            var run_texts = runs.Select(n => n.InnerText);
+
+            string par_text = "";
+            if (run_texts.Count() > 0)
+                par_text = run_texts.Aggregate((x, y) => $"{x} {y}");
+
+            return par_text;
         }
 
         private TableRow GetTitleRow(Table table)
@@ -233,7 +281,7 @@ namespace DocsParserLib
             return table.Elements<TableRow>().ElementAt(0);
         }
 
-        private Regex CreateFilterPattern(string[] filters)
+        public Regex CreateFilterPattern(string[] filters)
         {
             string pat = string.Join('|', filters.Select(n => $"({n})"));
             return new Regex(pat, RegexOptions.IgnoreCase);

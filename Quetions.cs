@@ -34,7 +34,7 @@ namespace DocsParserLib
         }
     }
 
-    public struct ParcticTask
+    public struct PracticTask
     {
         public int Number;
         public int CompetentionNum;
@@ -42,7 +42,7 @@ namespace DocsParserLib
 
         public List<AnswerVariant> answerVariants { get; private set; }
 
-        public ParcticTask(int _numb, int _comp_num, string _descr, List<AnswerVariant> answers)
+        public PracticTask(int _numb, int _comp_num, string _descr, List<AnswerVariant> answers)
         {
             Number = _numb;
             CompetentionNum = _comp_num;
@@ -50,6 +50,6 @@ namespace DocsParserLib
             answerVariants = answers;
         }
 
-        public ParcticTask(int _numb, int _comp_num, string _descr) : this(_numb, _comp_num, _descr, new List<AnswerVariant>()) { }
+        public PracticTask(int _numb, int _comp_num, string _descr) : this(_numb, _comp_num, _descr, new List<AnswerVariant>()) { }
     }
 }
