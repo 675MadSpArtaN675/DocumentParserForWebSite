@@ -1,13 +1,21 @@
-﻿using DocumentFormat.OpenXml.Office2013.Excel;
-using System;
-
-namespace DocsParserLib
+﻿namespace DocsParserLib
 {
-    public struct Question
+    public interface IAssessmentItem
     {
-        public int Number;
-        public Competention Competention;
-        public string Description;
+        public int Number { get; set; }
+        public string Description { get; set; }
+    }
+
+    public interface ICompetencinable
+    {
+        public Competention Competention { get; set; }
+    }
+
+    public struct Question : IAssessmentItem, ICompetencinable
+    {
+        public int Number { get; set; }
+        public string Description { get; set; }
+        public Competention Competention { get; set; }
 
         public Question(int _num, Competention _comp_name, string _descr)
         { 
@@ -22,11 +30,11 @@ namespace DocsParserLib
         }
     }
 
-    public struct AnswerVariant
+    public struct AnswerVariant : IAssessmentItem
     {
-        public int Number;
-        public string Description;
-        public bool ValidAnswer;
+        public int Number { get; set; }
+        public string Description { get; set; }
+        public bool ValidAnswer { get; set; }
 
         public char AnswerLetter { 
             get
@@ -58,11 +66,12 @@ namespace DocsParserLib
         }
     }
 
-    public struct PracticTask
+    public struct PracticTask : IAssessmentItem, ICompetencinable
     {
-        public int Number;
-        public Competention Competention;
-        public string Description;
+        public int Number { get; set; }
+        public string Description { get; set; }
+        public Competention Competention { get; set; }
+        
 
         public List<AnswerVariant> answerVariants { get; private set; }
 

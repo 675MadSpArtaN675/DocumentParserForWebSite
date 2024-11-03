@@ -1,7 +1,4 @@
-﻿using System;
-using System.Linq;
-using System.Text.RegularExpressions;
-using DocumentFormat.OpenXml;
+﻿using System.Text.RegularExpressions;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
@@ -66,6 +63,8 @@ namespace DocsParserLib
             _doc = new Document(filename);
 
             compets = new List<Competention>();
+            _questions = new List<Question>();
+            _practicTasks = new List<PracticTask>();
         }
 
         public List<Competention>? GetCompetentions()
@@ -100,9 +99,12 @@ namespace DocsParserLib
 
         public List<Question>? GetQuestions()
         {
+            if (_questions.Count > 0)
+                return _questions;
+
             string[] filters = { "результатов", "компетенций", "вопросы" };
 
-            return ReadTable<Question>(filters, (question_table, _questions) =>
+            return ReadTable<Question>(filters, (question_table, questions) =>
             {
                 IEnumerable<TableRow> table_rows = question_table.Elements<TableRow>();
                 IEnumerable<TableCell> questions_cells = table_rows.Skip(1).SelectMany(n => n.Elements<TableCell>());
@@ -112,22 +114,17 @@ namespace DocsParserLib
 
                 Competention? comp = GetCompetentionByName(title_match);
 
-                ReadQuestions(_questions, questions_cells, comp ?? new Competention());
+                ReadQuestions(questions, questions_cells, comp ?? new Competention());
+                _questions = questions;
             });
 
         }
 
-        // Action<
-        // Table? - откуда считываем строки
-        // List<Question> - куда сохранять результат
-        // Match? - результат сравнения шаблона заголовка нужной таблицы
-        // (Для какой компетенции предназначено)
-        // >
-
-        // Предупреждение: Данная функция сделана для чтения вопросов и практических заданий
-        
         public List<PracticTask> GetPracticTasks()
         {
+            if (_practicTasks.Count() > 0)
+                return _practicTasks;
+
             string[] filters = ["Практические", "задания", "результатов"];
 
             var result_tasks = ReadTable<PracticTask>(filters, 
@@ -152,61 +149,18 @@ namespace DocsParserLib
                     }
             });
 
+            _practicTasks = result_tasks;
             return result_tasks;
         }
 
-        private PracticTask PracticeTaskRowParse(TableRow row, int question_num, Competention comp)
-        {
-            IEnumerable<Paragraph> answer = row.ElementAt(1).Elements<Paragraph>();
-            
-            string title = answer.ElementAt(0).InnerText.Trim();
-            List<AnswerVariant> variants = new List<AnswerVariant>();
+        // Action<
+        // Table? - откуда считываем строки
+        // List<Question> - куда сохранять результат
+        // Match? - результат сравнения шаблона заголовка нужной таблицы
+        // (Для какой компетенции предназначено)
+        // >
 
-            int i = 0;
-            foreach (var paragraph in answer.Skip(1))
-            {
-                if (paragraph.InnerText != "")
-                {
-                    string ans_description = paragraph.InnerText.Trim();
-                    bool valid_var = false;
-
-                    if (paragraph.Elements<Run>()?.ElementAt(0)?.RunProperties?.Bold is not null)
-                        valid_var = true;
-
-                    variants.Add(new AnswerVariant(i, ans_description, valid_var));
-                    i++;
-                }
-            }
-
-            PracticTask task = new PracticTask(question_num, comp, title, variants);
-            return task;
-        }
-
-        private string? GetCompetitionNameStr(string title_text)
-        {
-            Regex comp_pat = new Regex(@"([А-Я]{2}-\d+)\s*");
-            Match match = comp_pat.Match(title_text.Trim());
-
-            if (match.Success && match.Value != "")
-                return match.Value.Trim();
-
-            return null;
-        }
-
-        private Competention? GetCompetentionByName(string name)
-        {
-            Console.WriteLine($"A{name}A");
-            try
-            {
-                return compets.First(n => n.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase));
-            }
-            catch (ArgumentNullException)
-            { 
-                return null; 
-            }
-            
-        }
-
+        // Предупреждение: Данная функция сделана для чтения вопросов и практических заданий
         private List<T>? ReadTable<T>(string[] filters, Action<Table?, List<T>> read_rows)
         {
             Regex pattern = CreateFilterPattern(filters);
@@ -293,6 +247,33 @@ namespace DocsParserLib
             return result;
         }
 
+        private PracticTask PracticeTaskRowParse(TableRow row, int question_num, Competention comp)
+        {
+            IEnumerable<Paragraph> answer = row.ElementAt(1).Elements<Paragraph>();
+
+            string title = answer.ElementAt(0).InnerText.Trim();
+            List<AnswerVariant> variants = new List<AnswerVariant>();
+
+            int i = 0;
+            foreach (var paragraph in answer.Skip(1))
+            {
+                if (paragraph.InnerText != "")
+                {
+                    string ans_description = paragraph.InnerText.Trim();
+                    bool valid_var = false;
+
+                    if (paragraph.Elements<Run>()?.ElementAt(0)?.RunProperties?.Bold is not null)
+                        valid_var = true;
+
+                    variants.Add(new AnswerVariant(i, ans_description, valid_var));
+                    i++;
+                }
+            }
+
+            PracticTask task = new PracticTask(question_num, comp, title, variants);
+            return task;
+        }
+
         private void FindPrevTitle(in Table? question_table, ref Paragraph? par_1, ref Paragraph? par_2)
         {
             if (question_table is not null)
@@ -353,6 +334,30 @@ namespace DocsParserLib
                 }
 
             }
+        }
+
+        private string? GetCompetitionNameStr(string title_text)
+        {
+            Regex comp_pat = new Regex(@"([А-Я]{2}-\d+)\s*");
+            Match match = comp_pat.Match(title_text.Trim());
+
+            if (match.Success && match.Value != "")
+                return match.Value.Trim();
+
+            return null;
+        }
+
+        private Competention? GetCompetentionByName(string name)
+        {
+            try
+            {
+                return compets.First(n => n.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+            catch (ArgumentNullException)
+            {
+                return null;
+            }
+
         }
 
         private string UnionRuns(Paragraph? paragraph)

@@ -2,10 +2,10 @@
 {
     public struct EvalulationMaterial
     {
-        public string Name;
-        public string Description;
-        public string EM_Type;
-        public string EvalulationIndicator;
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public string EM_Type { get; set; }
+        public string EvalulationIndicator { get; set; }
 
         public EvalulationMaterial(string name, string description, string em_type, string evalulation_indicator)
         {
@@ -23,8 +23,8 @@
 
     public struct Competention
     {
-        public int Number;
-        public string Name;
+        public int Number { get; set; }
+        public string Name { get; set; }
         public List<EvalulationMaterial> EvalulationMaterial;
 
         public Competention(int _number, string _name, List<EvalulationMaterial> e_mat)
