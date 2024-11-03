@@ -26,30 +26,63 @@ namespace DocsParserLib
     {
         public int Number;
         public string Description;
+        public bool ValidAnswer;
 
-        public AnswerVariant(int _num, string _desc)
+        public char AnswerLetter { 
+            get
+            {
+                return Letters[Number];
+            } 
+        }
+
+        public int AnswerNormalNumber
+        {
+            get
+            {
+                return Number + 1;
+            }
+        }
+
+        private string Letters = "АБВГДЕЁЖЗИЙКЛМНОПРСТ";
+
+        public AnswerVariant(int _num, string _desc, bool valid)
         {
             Number = _num;
             Description = _desc;
+            ValidAnswer = valid;
+        }
+
+        public override string ToString()
+        {
+            return $"[{Number}/{AnswerNormalNumber}/{AnswerLetter}]:\nDescription: {Description}\nValid: {ValidAnswer}";
         }
     }
 
     public struct PracticTask
     {
         public int Number;
-        public int CompetentionNum;
+        public Competetion Competetion;
         public string Description;
 
         public List<AnswerVariant> answerVariants { get; private set; }
 
-        public PracticTask(int _numb, int _comp_num, string _descr, List<AnswerVariant> answers)
+        public PracticTask(int _numb, Competetion _competetion, string _descr, List<AnswerVariant> answers)
         {
             Number = _numb;
-            CompetentionNum = _comp_num;
+            Competetion = _competetion;
             Description = _descr;
             answerVariants = answers;
         }
 
-        public PracticTask(int _numb, int _comp_num, string _descr) : this(_numb, _comp_num, _descr, new List<AnswerVariant>()) { }
+        public PracticTask(int _numb, Competetion _competetion, string _descr) : this(_numb, _competetion, _descr, new List<AnswerVariant>()) { }
+
+        public override string ToString()
+        {
+            string answers = "";
+            foreach (var variant in answerVariants)
+                answers += variant.ToString() + "\n\n";
+                
+            return $"{Number} {Competetion.Name} {Description}\n{answers}";
+        }
     }
 }

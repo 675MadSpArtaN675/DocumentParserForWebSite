@@ -2,8 +2,6 @@
 using System.Linq;
 using System.Text.RegularExpressions;
 using DocumentFormat.OpenXml;
-using DocumentFormat.OpenXml.Office.CustomUI;
-using DocumentFormat.OpenXml.Office.SpreadSheetML.Y2023.MsForms;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
@@ -100,19 +98,79 @@ namespace DocsParserLib
 
             var result_tasks = ReadTable<PracticTask>(filters, 
                 (competetion_match, question_table, tasks) => {
-                    List<TableRow> tasks_rows = question_table.Elements<TableRow>().Skip(1).ToList();
+                    List<TableRow> tasks_rows = question_table.Elements<TableRow>().ToList();
 
+                    int question_num = 1;
+                    Competetion? comp = null;
                     foreach (TableRow row in tasks_rows)
                     {
-                        Console.WriteLine(row.InnerText);
-                        tasks.Add(new PracticTask(0, 0, row.InnerText));
+                        string? title = GetCompetitionNameStr(row.InnerText);
+
+                        if (title is not null)
+                        {
+                            comp = GetCompetetionByName(title);
+                            question_num = 1;
+                            continue;
+                        }
+
+                        Console.WriteLine(PracticeTaskRowParse(row, question_num, comp ?? new Competetion()));
+                        question_num++;
+                        //tasks.Add(new PracticTask(0, new Competetion(1, ""), row.InnerText));
                     }
             });
 
-
-
-
             return result_tasks;
+        }
+
+        private PracticTask PracticeTaskRowParse(TableRow row, int question_num, Competetion comp)
+        {
+            IEnumerable<Paragraph> answer = row.ElementAt(1).Elements<Paragraph>();
+            
+            string title = answer.ElementAt(0).InnerText.Trim();
+            List<AnswerVariant> variants = new List<AnswerVariant>();
+
+            int i = 0;
+            foreach (var paragraph in answer.Skip(1))
+            {
+                if (paragraph.InnerText != "")
+                {
+                    string ans_description = paragraph.InnerText.Trim();
+                    bool valid_var = false;
+
+                    if (paragraph.Elements<Run>()?.ElementAt(0)?.RunProperties?.Bold is not null)
+                        valid_var = true;
+
+                    variants.Add(new AnswerVariant(i, ans_description, valid_var));
+                    i++;
+                }
+            }
+
+            PracticTask task = new PracticTask(question_num, comp, title, variants);
+            return task;
+        }
+
+        public string? GetCompetitionNameStr(string title_text)
+        {
+            Regex comp_pat = new Regex(@"([А-Я]{2}-\d+)\s*");
+            Match match = comp_pat.Match(title_text.Trim());
+
+            if (match.Success && match.Value != "")
+                return match.Value;
+
+            return null;
+        }
+
+        private Competetion? GetCompetetionByName(string name)
+        {
+            try
+            {
+                return compets.First(n => n.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+            catch (ArgumentNullException)
+            { 
+                return null; 
+            }
+            
         }
 
         private List<T> ReadTable<T>(string[] filters, Action<Match?, Table?, List<T>> read_rows)
@@ -142,7 +200,9 @@ namespace DocsParserLib
                     break;
 
                 question_table = question_table.NextSibling<Table>();
-                FindPrevTitle(in question_table, out par_1, out par_2);
+
+                if (question_table is not null)
+                    FindPrevTitle(in question_table, out par_1, out par_2);
             }
 
             return result;
