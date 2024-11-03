@@ -13,4 +13,11 @@
         HasSkills, // Наличие умений
         HasAbilities, // Наличие навыков
     }
+
+    public struct ParsedData
+    {
+        public List<Competention> compets;
+        public List<Question> question;
+        public List<PracticTask> practicTasks;
+    }
 }

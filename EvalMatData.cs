@@ -21,22 +21,22 @@
         }
     }
 
-    public struct Competetion
+    public struct Competention
     {
         public int Number;
         public string Name;
         public List<EvalulationMaterial> EvalulationMaterial;
 
-        public Competetion(int _number, string _name, List<EvalulationMaterial> e_mat)
+        public Competention(int _number, string _name, List<EvalulationMaterial> e_mat)
         {
             Number = _number;
             Name = _name;
             EvalulationMaterial = e_mat;
         }
 
-        public Competetion(int _number, string _name) : this(_number, _name, new List<EvalulationMaterial>()) { }
+        public Competention(int _number, string _name) : this(_number, _name, new List<EvalulationMaterial>()) { }
 
-        public Competetion() : this(1, "", new List<EvalulationMaterial>()) { }
+        public Competention() : this(1, "", new List<EvalulationMaterial>()) { }
 
         public override string ToString()
         {

@@ -6,10 +6,10 @@ namespace DocsParserLib
     public struct Question
     {
         public int Number;
-        public Competetion Competention;
+        public Competention Competention;
         public string Description;
 
-        public Question(int _num, Competetion _comp_name, string _descr)
+        public Question(int _num, Competention _comp_name, string _descr)
         { 
             Number = _num;
             Competention = _comp_name;
@@ -61,20 +61,26 @@ namespace DocsParserLib
     public struct PracticTask
     {
         public int Number;
-        public Competetion Competetion;
+        public Competention Competention;
         public string Description;
 
         public List<AnswerVariant> answerVariants { get; private set; }
 
-        public PracticTask(int _numb, Competetion _competetion, string _descr, List<AnswerVariant> answers)
+        public PracticTask(int _numb, Competention _competetion, string _descr, List<AnswerVariant> answers)
         {
             Number = _numb;
-            Competetion = _competetion;
+            Competention = _competetion;
             Description = _descr;
             answerVariants = answers;
         }
 
-        public PracticTask(int _numb, Competetion _competetion, string _descr) : this(_numb, _competetion, _descr, new List<AnswerVariant>()) { }
+        public PracticTask(int _numb, Competention _competetion, string _descr) : this(_numb, _competetion, _descr, new List<AnswerVariant>()) { }
+
+
+        public AnswerVariant GetValidVariant()
+        {
+            return answerVariants.First(n => n.ValidAnswer);
+        }
 
         public override string ToString()
         {
@@ -82,7 +88,7 @@ namespace DocsParserLib
             foreach (var variant in answerVariants)
                 answers += variant.ToString() + "\n\n";
                 
-            return $"{Number} {Competetion.Name} {Description}\n{answers}";
+            return $"{Number} {Competention.Name} {Description}\n{answers}";
         }
     }
 }

@@ -57,18 +57,16 @@ namespace DocsParserLib
     {
         private Document _doc;
         
-        private IEnumerable<Table> tables;
-        private List<Competetion> compets;
+        private List<Competention> compets;
 
         public DocParser(string filename)
         {
             _doc = new Document(filename);
 
-            tables = _doc.DocBody.Elements<Table>();
-            compets = new List<Competetion>();
+            compets = new List<Competention>();
         }
 
-        public List<Competetion>? GetCompetetions()
+        public List<Competention>? GetCompetentions()
         {
             if (compets.Count > 0)
                 return compets;
@@ -89,10 +87,10 @@ namespace DocsParserLib
                 var row = rowsWithoutTitle.Take(3);
                 rowsWithoutTitle = rowsWithoutTitle.Except(row);
 
-                Competetion? competetion = CreateCompetetion(row);
+                Competention? competetion = CreateCompetention(row);
 
                 if (competetion is not null)
-                    compets.Add((Competetion)competetion);
+                    compets.Add((Competention)competetion);
             }
 
             return compets;
@@ -109,9 +107,10 @@ namespace DocsParserLib
 
                 string title = table_rows.ElementAt(0).InnerText.Trim();
                 string? title_match = GetCompetitionNameStr(title);
-                Competetion? comp = GetCompetetionByName(title_match);
 
-                ReadQuestions(_questions, questions_cells, comp ?? new Competetion());
+                Competention? comp = GetCompetentionByName(title_match);
+
+                ReadQuestions(_questions, questions_cells, comp ?? new Competention());
             });
 
         }
@@ -134,19 +133,19 @@ namespace DocsParserLib
                     List<TableRow> tasks_rows = question_table.Elements<TableRow>().ToList();
 
                     int question_num = 1;
-                    Competetion? comp = null;
+                    Competention? comp = null;
                     foreach (TableRow row in tasks_rows)
                     {
                         string? title = GetCompetitionNameStr(row.InnerText);
 
                         if (title is not null)
                         {
-                            comp = GetCompetetionByName(title);
+                            comp = GetCompetentionByName(title);
                             question_num = 1;
                             continue;
                         }
 
-                        tasks.Add(PracticeTaskRowParse(row, question_num, comp ?? new Competetion()));
+                        tasks.Add(PracticeTaskRowParse(row, question_num, comp ?? new Competention()));
                         question_num++;
                     }
             });
@@ -154,7 +153,7 @@ namespace DocsParserLib
             return result_tasks;
         }
 
-        private PracticTask PracticeTaskRowParse(TableRow row, int question_num, Competetion comp)
+        private PracticTask PracticeTaskRowParse(TableRow row, int question_num, Competention comp)
         {
             IEnumerable<Paragraph> answer = row.ElementAt(1).Elements<Paragraph>();
             
@@ -192,7 +191,7 @@ namespace DocsParserLib
             return null;
         }
 
-        private Competetion? GetCompetetionByName(string name)
+        private Competention? GetCompetentionByName(string name)
         {
             Console.WriteLine($"A{name}A");
             try
@@ -238,9 +237,9 @@ namespace DocsParserLib
             return result;
         }
 
-        private Competetion? CreateCompetetion(IEnumerable<TableRow> row)
+        private Competention? CreateCompetention(IEnumerable<TableRow> row)
         {
-            Competetion result = new Competetion();
+            Competention result = new Competention();
             EvalulationMaterial eval_mat = new EvalulationMaterial();
 
             IEnumerable<TableCell[]> row_elements = row.Select((elem) => elem.Elements<TableCell>().ToArray());
@@ -333,7 +332,7 @@ namespace DocsParserLib
             return null;
         }
 
-        private void ReadQuestions(List<Question> questions_list, IEnumerable<TableCell> questions_cells, Competetion competention)
+        private void ReadQuestions(List<Question> questions_list, IEnumerable<TableCell> questions_cells, Competention competention)
         {
             foreach (var item in questions_cells)
             {
