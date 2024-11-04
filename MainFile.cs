@@ -1,10 +1,138 @@
-﻿using System.Text.RegularExpressions;
+﻿using System;
+using System.Text.RegularExpressions;
+using DocumentFormat.OpenXml.Office.SpreadSheetML.Y2023.MsForms;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace DocsParserLib
 {
-    internal class Document
+    public interface IParsable<T>
+    {
+        string[] Filters { get; set; }
+        List<T> Data { get; }
+
+        List<T>? Parse();
+    }
+
+    public abstract class Parser
+    {
+        protected Document _doc;
+
+        public Parser(Document document)
+        {
+            _doc = document;
+        }
+
+        protected string? GetCompetitionNameStr(string title_text)
+        {
+            Regex comp_pat = new Regex(@"([А-Я]{2}-\d+)\s*");
+            Match match = comp_pat.Match(title_text.Trim());
+
+            if (match.Success && match.Value != "")
+                return match.Value.Trim();
+
+            return null;
+        }
+
+        protected List<T>? ReadTable<T>(string[] filters, Action<Table?, List<T>> read_rows)
+        {
+            Regex pattern = CreateFilterPattern(filters);
+
+            List<T> result = new List<T>();
+
+            Table? question_table = FindTableByTitle(filters);
+
+            if (question_table is null)
+                return null;
+
+            var par_1 = question_table.PreviousSibling<Paragraph>();
+            var par_2 = par_1?.PreviousSibling<Paragraph>();
+
+            while (question_table is not null)
+            {
+                if (pattern.Matches($"{par_1?.InnerText} {par_2?.InnerText}").Count == filters.Length)
+                {
+                    //! List<T> question_list, Match pattern, string filters
+                    read_rows(question_table, result);
+                }
+                else
+                    break;
+
+                question_table = question_table.NextSibling<Table>();
+
+                FindPrevTitle(in question_table, ref par_1, ref par_2);
+            }
+
+            return result;
+        }
+
+        protected void FindPrevTitle(in Table? question_table, ref Paragraph? par_1, ref Paragraph? par_2)
+        {
+            if (question_table is not null)
+            {
+                par_2 = question_table.PreviousSibling<Paragraph>();
+                par_1 = par_2?.PreviousSibling<Paragraph>();
+
+                while (par_1.InnerText == "" || par_2.InnerText == "")
+                {
+                    par_2 = par_2.PreviousSibling<Paragraph>();
+                    par_1 = par_2.PreviousSibling<Paragraph>();
+                }
+            }
+        }
+
+        protected Table? FindTableByTitle(string[] filters)
+        {
+            if (_doc.DocBody is null) return null;
+
+            var paragraphs = _doc.DocBody.Elements<Paragraph>().ToArray();
+            Regex title_pattern = CreateFilterPattern(filters);
+
+            foreach (var paragraph in paragraphs)
+            {
+                string par_text = UnionRuns(paragraph);
+
+                if (title_pattern.Matches(par_text).Count() == filters.Length)
+                    return paragraph.NextSibling<Table>();
+
+                Paragraph? next_par = paragraph.NextSibling<Paragraph>();
+                string par_text_2 = UnionRuns(next_par);
+
+                par_text += " " + par_text_2;
+
+                if (title_pattern.Matches(par_text).Count() == filters.Length)
+                    return next_par?.NextSibling<Table>();
+            }
+
+            return null;
+        }
+
+        protected string UnionRuns(Paragraph? paragraph)
+        {
+            if (paragraph == null) return "";
+
+            var runs = paragraph.Elements<Run>();
+            var run_texts = runs.Select(n => n.InnerText);
+
+            string par_text = "";
+            if (run_texts.Count() > 0)
+                par_text = run_texts.Aggregate((x, y) => $"{x} {y}");
+
+            return par_text;
+        }
+
+        protected TableRow GetTitleRow(Table table)
+        {
+            return table.Elements<TableRow>().ElementAt(0);
+        }
+
+        protected Regex CreateFilterPattern(string[] filters)
+        {
+            string pat = string.Join('|', filters.Select(n => $"({n})"));
+            return new Regex(pat, RegexOptions.IgnoreCase);
+        }
+    }
+    public class Document
     {
         private WordprocessingDocument _wordDoc;
         private MainDocumentPart? _mainPart;
@@ -50,30 +178,35 @@ namespace DocsParserLib
 
     */
 
-    public class DocParser
+    public class CompetentionParser : Parser, IParsable<Competention>
     {
-        private Document _doc;
-        
+        public string[] Filters { get; set; }
+
         private List<Competention> compets;
-        private List<Question> _questions;
-        private List<PracticTask> _practicTasks;
 
-        public DocParser(string filename)
+        public List<Competention>? Data
         {
-            _doc = new Document(filename);
+            get
+            {
+                if (compets.Count > 0)
+                    return compets;
 
-            compets = new List<Competention>();
-            _questions = new List<Question>();
-            _practicTasks = new List<PracticTask>();
+                return null;
+            }
         }
 
-        public List<Competention>? GetCompetentions()
+        public CompetentionParser(Document document) : base(document)
         {
-            if (compets.Count > 0)
-                return compets;
+            compets = new List<Competention>();
+            Filters = new string[] { "ПЕРЕЧЕНЬ", "ПЛАНИРУЕМЫХ", "РЕЗУЛЬТАТОВ" };
+        }
 
-            string[] filters_lines = { "ПЕРЕЧЕНЬ", "ПЛАНИРУЕМЫХ", "РЕЗУЛЬТАТОВ"};
-            Table? table = FindTableByTitle(filters_lines);
+        public CompetentionParser(string filename) : this(new Document(filename))
+        { }
+
+        public List<Competention>? Parse()
+        {
+            Table? table = FindTableByTitle(Filters);
 
             if (table is null)
                 return null;
@@ -97,100 +230,17 @@ namespace DocsParserLib
             return compets;
         }
 
-        public List<Question>? GetQuestions()
+        public Competention? GetCompetentionByName(string name)
         {
-            if (_questions.Count > 0)
-                return _questions;
-
-            string[] filters = { "результатов", "компетенций", "вопросы" };
-
-            return ReadTable<Question>(filters, (question_table, questions) =>
+            try
             {
-                IEnumerable<TableRow> table_rows = question_table.Elements<TableRow>();
-                IEnumerable<TableCell> questions_cells = table_rows.Skip(1).SelectMany(n => n.Elements<TableCell>());
-
-                string title = table_rows.ElementAt(0).InnerText.Trim();
-                string? title_match = GetCompetitionNameStr(title);
-
-                Competention? comp = GetCompetentionByName(title_match);
-
-                ReadQuestions(questions, questions_cells, comp ?? new Competention());
-                _questions = questions;
-            });
-
-        }
-
-        public List<PracticTask> GetPracticTasks()
-        {
-            if (_practicTasks.Count() > 0)
-                return _practicTasks;
-
-            string[] filters = ["Практические", "задания", "результатов"];
-
-            var result_tasks = ReadTable<PracticTask>(filters, 
-                (question_table, tasks) => {
-                    List<TableRow> tasks_rows = question_table.Elements<TableRow>().ToList();
-
-                    int question_num = 1;
-                    Competention? comp = null;
-                    foreach (TableRow row in tasks_rows)
-                    {
-                        string? title = GetCompetitionNameStr(row.InnerText);
-
-                        if (title is not null)
-                        {
-                            comp = GetCompetentionByName(title);
-                            question_num = 1;
-                            continue;
-                        }
-
-                        tasks.Add(PracticeTaskRowParse(row, question_num, comp ?? new Competention()));
-                        question_num++;
-                    }
-            });
-
-            _practicTasks = result_tasks;
-            return result_tasks;
-        }
-
-        // Action<
-        // Table? - откуда считываем строки
-        // List<Question> - куда сохранять результат
-        // Match? - результат сравнения шаблона заголовка нужной таблицы
-        // (Для какой компетенции предназначено)
-        // >
-
-        // Предупреждение: Данная функция сделана для чтения вопросов и практических заданий
-        private List<T>? ReadTable<T>(string[] filters, Action<Table?, List<T>> read_rows)
-        {
-            Regex pattern = CreateFilterPattern(filters);
-                  
-            List<T> result = new List<T>();
-
-            Table? question_table = FindTableByTitle(filters);
-
-            if (question_table is null)
+                return compets.First(n => n.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+            catch (ArgumentNullException)
+            {
                 return null;
-
-            var par_1 = question_table.PreviousSibling<Paragraph>();
-            var par_2 = par_1?.PreviousSibling<Paragraph>();
-
-            while (question_table is not null)
-            {
-                if (pattern.Matches($"{par_1?.InnerText} {par_2?.InnerText}").Count == filters.Length)
-                {
-                    //! List<T> question_list, Match pattern, string filters
-                    read_rows(question_table, result);
-                }
-                else
-                    break;
-
-                question_table = question_table.NextSibling<Table>();
-
-                FindPrevTitle(in question_table, ref par_1, ref par_2);
             }
 
-            return result;
         }
 
         private Competention? CreateCompetention(IEnumerable<TableRow> row)
@@ -247,6 +297,141 @@ namespace DocsParserLib
             return result;
         }
 
+        
+    }
+
+    public class QuestionParser : Parser, IParsable<Question>
+    {
+        public string[] Filters { get; set; }
+        public List<Question>? Data 
+        {
+            get
+            {
+                if (_questions.Count() > 0)
+                    return _questions;
+
+                return null;
+            }
+        }
+
+        private CompetentionParser _comp_parser;
+        private List<Question> _questions;
+
+        public QuestionParser(Document document, CompetentionParser comp_parser) :base(document)
+        {
+            if (comp_parser.Data is null)
+                comp_parser.Parse();
+
+            _comp_parser = comp_parser;
+            _questions = new List<Question>();
+            Filters = new string[]{ "результатов", "компетенций", "вопросы" };
+
+
+        }
+
+        public QuestionParser(string filename, CompetentionParser comp_parser) : this(new Document(filename), comp_parser)
+        {}
+
+        public List<Question>? Parse()
+        {
+            return ReadTable<Question>(Filters, (question_table, questions) =>
+            {
+                IEnumerable<TableRow> table_rows = question_table.Elements<TableRow>();
+                IEnumerable<TableCell> questions_cells = table_rows.Skip(1).SelectMany(n => n.Elements<TableCell>());
+
+                string title = table_rows.ElementAt(0).InnerText.Trim();
+                string? title_match = GetCompetitionNameStr(title);
+
+                Competention? comp = _comp_parser.GetCompetentionByName(title_match);
+
+                ReadQuestions(questions, questions_cells, comp ?? new Competention());
+                _questions = questions;
+            });
+
+        }
+
+        private void ReadQuestions(List<Question> questions_list, IEnumerable<TableCell> questions_cells, Competention competention)
+        {
+            foreach (var item in questions_cells)
+            {
+                int question_num = 1;
+                foreach (var item1 in item.Elements<Paragraph>())
+                {
+                    string question_description = item1.InnerText;
+
+                    if (question_description.Length > 0)
+                    {
+                        Question question = new Question(question_num, competention, question_description);
+                        questions_list.Add(question);
+
+                        question_num++;
+                    }
+                }
+
+            }
+        }
+    }
+
+    public class PracticTasksParser : Parser, IParsable<PracticTask>
+    {
+        public string[] Filters { get; set; }
+        public List<PracticTask>? Data 
+        { 
+            get
+            {
+                if (_practicTasks.Count() > 0)
+                    return _practicTasks;
+
+                return null;
+            }
+        }
+
+        private List<PracticTask> _practicTasks;
+        private CompetentionParser _comp_parser;
+
+
+        public PracticTasksParser(Document document, CompetentionParser comp_parser) : base(document)
+        {
+            if (comp_parser.Data is null)
+                comp_parser.Parse();
+
+            _comp_parser = comp_parser;
+            _practicTasks = new List<PracticTask>();
+
+            Filters = ["Практические", "задания", "результатов"];
+        }
+
+        public PracticTasksParser(string filename, CompetentionParser comp_parser) : this(new Document(filename), comp_parser)
+        {}
+
+        public List<PracticTask>? Parse()
+        { 
+            var result_tasks = ReadTable<PracticTask>(Filters,
+                (question_table, tasks) => {
+                    List<TableRow> tasks_rows = question_table.Elements<TableRow>().ToList();
+
+                    int question_num = 1;
+                    Competention? comp = null;
+                    foreach (TableRow row in tasks_rows)
+                    {
+                        string? title = GetCompetitionNameStr(row.InnerText);
+
+                        if (title is not null)
+                        {
+                            comp = _comp_parser.GetCompetentionByName(title);
+                            question_num = 1;
+                            continue;
+                        }
+
+                        tasks.Add(PracticeTaskRowParse(row, question_num, comp ?? new Competention()));
+                        question_num++;
+                    }
+                });
+
+            _practicTasks = result_tasks;
+            return result_tasks;
+        }
+
         private PracticTask PracticeTaskRowParse(TableRow row, int question_num, Competention comp)
         {
             IEnumerable<Paragraph> answer = row.ElementAt(1).Elements<Paragraph>();
@@ -273,116 +458,18 @@ namespace DocsParserLib
             PracticTask task = new PracticTask(question_num, comp, title, variants);
             return task;
         }
+    }
 
-        private void FindPrevTitle(in Table? question_table, ref Paragraph? par_1, ref Paragraph? par_2)
-        {
-            if (question_table is not null)
-            {
-                par_2 = question_table.PreviousSibling<Paragraph>();
-                par_1 = par_2?.PreviousSibling<Paragraph>();
+    public class DocParser
+    {
+        // Action<
+        // Table? - откуда считываем строки
+        // List<Question> - куда сохранять результат
+        // Match? - результат сравнения шаблона заголовка нужной таблицы
+        // (Для какой компетенции предназначено)
+        // >
 
-                while (par_1.InnerText == "" || par_2.InnerText == "")
-                {
-                    par_2 = par_2.PreviousSibling<Paragraph>();
-                    par_1 = par_2.PreviousSibling<Paragraph>();
-                }
-            }
-        }
-
-        private Table? FindTableByTitle(string[] filters)
-        {
-            if (_doc.DocBody is null) return null;
-
-            var paragraphs = _doc.DocBody.Elements<Paragraph>().ToArray();
-            Regex title_pattern = CreateFilterPattern(filters);
-
-            foreach (var paragraph in paragraphs)
-            {
-                string par_text = UnionRuns(paragraph);
-
-                if (title_pattern.Matches(par_text).Count() == filters.Length)
-                    return paragraph.NextSibling<Table>();
-
-                Paragraph? next_par = paragraph.NextSibling<Paragraph>();
-                string par_text_2 = UnionRuns(next_par);
-
-                par_text += " " + par_text_2;
-
-                if (title_pattern.Matches(par_text).Count() == filters.Length)
-                    return next_par?.NextSibling<Table>();
-            }
-
-            return null;
-        }
-
-        private void ReadQuestions(List<Question> questions_list, IEnumerable<TableCell> questions_cells, Competention competention)
-        {
-            foreach (var item in questions_cells)
-            {
-                int question_num = 1;
-                foreach (var item1 in item.Elements<Paragraph>())
-                {
-                    string question_description = item1.InnerText;
-
-                    if (question_description.Length > 0)
-                    {
-                        Question question = new Question(question_num, competention, question_description);
-                        questions_list.Add(question);
-
-                        question_num++;
-                    }
-                }
-
-            }
-        }
-
-        private string? GetCompetitionNameStr(string title_text)
-        {
-            Regex comp_pat = new Regex(@"([А-Я]{2}-\d+)\s*");
-            Match match = comp_pat.Match(title_text.Trim());
-
-            if (match.Success && match.Value != "")
-                return match.Value.Trim();
-
-            return null;
-        }
-
-        private Competention? GetCompetentionByName(string name)
-        {
-            try
-            {
-                return compets.First(n => n.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase));
-            }
-            catch (ArgumentNullException)
-            {
-                return null;
-            }
-
-        }
-
-        private string UnionRuns(Paragraph? paragraph)
-        {
-            if (paragraph == null) return "";
-
-            var runs = paragraph.Elements<Run>();
-            var run_texts = runs.Select(n => n.InnerText);
-
-            string par_text = "";
-            if (run_texts.Count() > 0)
-                par_text = run_texts.Aggregate((x, y) => $"{x} {y}");
-
-            return par_text;
-        }
-
-        private TableRow GetTitleRow(Table table)
-        {
-            return table.Elements<TableRow>().ElementAt(0);
-        }
-
-        private Regex CreateFilterPattern(string[] filters)
-        {
-            string pat = string.Join('|', filters.Select(n => $"({n})"));
-            return new Regex(pat, RegexOptions.IgnoreCase);
-        }
+        // Предупреждение: Данная функция сделана для чтения вопросов и практических заданий
+        
     }
 }
