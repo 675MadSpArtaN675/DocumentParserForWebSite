@@ -216,7 +216,7 @@ namespace DocsParserLib
         /// <summary>
         /// Инициализирует экземпляр класса <see cref="CompetentionParser"/>
         /// </summary>
-        /// <param name="document">Экземпляр класса <see cref="Document"/>, обозначающий документ, из которого нужно спарсить компетенции</param>
+        /// <param name="document">Экземпляр класса <see cref="Document"/>, обозсв начающий документ, из которого нужно спарсить компетенции</param>
         public CompetentionParser(Document document) : base(document)
         {
             compets = new List<Competention>();
