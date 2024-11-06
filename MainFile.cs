@@ -8,9 +8,20 @@ namespace DocsParserLib
 {
     public interface IParsable<T>
     {
+        /// <summary>
+        /// Получить фильтры поиска таблицы
+        /// </summary>
         string[] Filters { get; set; }
+
+        /// <summary>
+        /// Получить, собранную из документа, информацию
+        /// </summary>
         List<T> Data { get; }
 
+        /// <summary>
+        /// Выполняет парсинг документа. Кэширует полученную информацию в свойство <see cref="Data"/>.
+        /// </summary>
+        /// <returns>Список из полученных строк/ячеек таблицы (Зависит от настроек конкретного парсера)</returns>
         List<T>? Parse();
     }
 
@@ -132,6 +143,10 @@ namespace DocsParserLib
             return new Regex(pat, RegexOptions.IgnoreCase);
         }
     }
+
+    /// <summary>
+    /// Класс, представляющий документ, из которого будет собрана информация
+    /// </summary>
     public class Document
     {
         private WordprocessingDocument _wordDoc;
@@ -153,6 +168,11 @@ namespace DocsParserLib
             get => _body;
         }
 
+        /// <summary>
+        /// Инициализирует экземпляр класса <see cref="Document"/>
+        /// </summary>
+        /// <param name="filename">Путь к документу для сбора информации</param>
+        /// <exception cref="MainPartNotFound">Выбрасывается в случае, если документ не найден.</exception>
         public Document(string filename)
         {
             _wordDoc = WordprocessingDocument.Open(filename, false);
@@ -170,20 +190,16 @@ namespace DocsParserLib
         }
     }
 
-    /* 
-
-    private WordprocessingDocument _wordDoc;
-    private MainDocumentPart? main_part;
-    private Body _Body;
-
-    */
-
+    
+    /// <summary>
+    /// Класс, представляющий парсер компетенций
+    /// </summary>
     public class CompetentionParser : Parser, IParsable<Competention>
     {
+        /// <inheritdoc/>
         public string[] Filters { get; set; }
 
-        private List<Competention> compets;
-
+        /// <inheritdoc/>
         public List<Competention>? Data
         {
             get
@@ -195,15 +211,26 @@ namespace DocsParserLib
             }
         }
 
+        private List<Competention> compets;
+
+        /// <summary>
+        /// Инициализирует экземпляр класса <see cref="CompetentionParser"/>
+        /// </summary>
+        /// <param name="document">Экземпляр класса <see cref="Document"/>, обозначающий документ, из которого нужно спарсить компетенции</param>
         public CompetentionParser(Document document) : base(document)
         {
             compets = new List<Competention>();
             Filters = new string[] { "ПЕРЕЧЕНЬ", "ПЛАНИРУЕМЫХ", "РЕЗУЛЬТАТОВ" };
         }
 
+        /// <summary>
+        /// Инициализирует экземпляр класса <see cref="CompetentionParser"/>
+        /// </summary>
+        /// <param name="filename">Путь и название файла, из которого нужно спарсить компетенции</param>
         public CompetentionParser(string filename) : this(new Document(filename))
         { }
 
+        /// <inheritdoc/>
         public List<Competention>? Parse()
         {
             Table? table = FindTableByTitle(Filters);
@@ -300,9 +327,14 @@ namespace DocsParserLib
         
     }
 
+    /// <summary>
+    /// Класс, представляющий парсер вопросов
+    /// </summary>
     public class QuestionParser : Parser, IParsable<Question>
     {
+        /// <inheritdoc/>
         public string[] Filters { get; set; }
+        /// <inheritdoc/>
         public List<Question>? Data 
         {
             get
@@ -317,6 +349,11 @@ namespace DocsParserLib
         private CompetentionParser _comp_parser;
         private List<Question> _questions;
 
+        /// <summary>
+        /// Инициализирует экземпляр класса <see cref="QuestionParser"></see>
+        /// </summary>
+        /// <param name="document">Документ, из которого нужно спарсить данные</param>
+        /// <param name="comp_parser">Парсер компетенций</param>
         public QuestionParser(Document document, CompetentionParser comp_parser) :base(document)
         {
             if (comp_parser.Data is null)
@@ -329,9 +366,15 @@ namespace DocsParserLib
 
         }
 
+        /// <summary>
+        /// Инициализирует экземпляр класса <see cref="QuestionParser">
+        /// </summary>
+        /// <param name="filename">Путь к документу, из которого нужно спарсить данные</param>
+        /// <param name="comp_parser">Парсер компетенций</param>
         public QuestionParser(string filename, CompetentionParser comp_parser) : this(new Document(filename), comp_parser)
         {}
 
+        /// <inheritdoc/>
         public List<Question>? Parse()
         {
             return ReadTable<Question>(Filters, (question_table, questions) =>
@@ -372,9 +415,14 @@ namespace DocsParserLib
         }
     }
 
+    /// <summary>
+    /// Класс, представляющий парсер практических заданий
+    /// </summary>
     public class PracticTasksParser : Parser, IParsable<PracticTask>
     {
+        /// <inheritdoc/>
         public string[] Filters { get; set; }
+        /// <inheritdoc/>
         public List<PracticTask>? Data 
         { 
             get
@@ -389,7 +437,11 @@ namespace DocsParserLib
         private List<PracticTask> _practicTasks;
         private CompetentionParser _comp_parser;
 
-
+        /// <summary>
+        /// Инициализирует экземпляр класса <see cref="PracticTasksParser"></see>
+        /// </summary>
+        /// <param name="document">Документ, из которого нужно спарсить данные</param>
+        /// <param name="comp_parser">Парсер компетенций</param>
         public PracticTasksParser(Document document, CompetentionParser comp_parser) : base(document)
         {
             if (comp_parser.Data is null)
@@ -401,9 +453,15 @@ namespace DocsParserLib
             Filters = ["Практические", "задания", "результатов"];
         }
 
+        /// <summary>
+        /// Инициализирует экземпляр класса <see cref="PracticTasksParser"></see>
+        /// </summary>
+        /// <param name="filename">Путь к документу, из которого нужно спарсить данные</param>
+        /// <param name="comp_parser">Парсер компетенций</param>
         public PracticTasksParser(string filename, CompetentionParser comp_parser) : this(new Document(filename), comp_parser)
         {}
 
+        /// <inheritdoc/>
         public List<PracticTask>? Parse()
         { 
             var result_tasks = ReadTable<PracticTask>(Filters,
@@ -458,18 +516,5 @@ namespace DocsParserLib
             PracticTask task = new PracticTask(question_num, comp, title, variants);
             return task;
         }
-    }
-
-    public class DocParser
-    {
-        // Action<
-        // Table? - откуда считываем строки
-        // List<Question> - куда сохранять результат
-        // Match? - результат сравнения шаблона заголовка нужной таблицы
-        // (Для какой компетенции предназначено)
-        // >
-
-        // Предупреждение: Данная функция сделана для чтения вопросов и практических заданий
-        
     }
 }
