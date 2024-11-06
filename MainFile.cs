@@ -254,6 +254,7 @@ namespace DocsParserLib
                     compets.Add((Competention)competetion);
             }
 
+            compets = compets.GroupBy(n => n.Number).Select(g => g.First()).ToList();
             return compets;
         }
 
