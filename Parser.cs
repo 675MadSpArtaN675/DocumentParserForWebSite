@@ -52,7 +52,6 @@ namespace DocsParserLib
             {
                 if (pattern.Matches($"{par_1?.InnerText} {par_2?.InnerText}").Count == filters.Length)
                 {
-                    //! List<T> question_list, Match pattern, string filters
                     read_rows(question_table, result);
                 }
                 else
@@ -249,15 +248,7 @@ namespace DocsParserLib
 
         public Competention? GetCompetentionByName(string name)
         {
-            try
-            {
-                return compets.First(n => n.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase));
-            }
-            catch (ArgumentNullException)
-            {
-                return null;
-            }
-
+             return compets.First(n => n.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase));
         }
 
         private Competention? CreateCompetention(IEnumerable<TableRow> row)
