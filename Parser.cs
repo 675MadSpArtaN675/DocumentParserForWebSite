@@ -34,11 +34,11 @@ namespace DocsParserLib
             return null;
         }
 
-        protected List<T>? ReadTable<T>(string[] filters, Action<Table?, List<T>> read_rows)
+        protected List<Y>? ReadTable<Y>(string[] filters, Action<Table?, List<Y>> read_rows)
         {
             Regex pattern = CreateFilterPattern(filters);
 
-            List<T> result = new List<T>();
+            List<Y> result = new List<Y>();
 
             Table? question_table = FindTableByTitle(filters);
 
