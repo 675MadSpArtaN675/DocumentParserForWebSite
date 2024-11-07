@@ -6,28 +6,17 @@ using DocumentFormat.OpenXml.Wordprocessing;
 
 namespace DocsParserLib
 {
-    public interface IParsable<T>
-    {
-        /// <summary>
-        /// Получить фильтры поиска таблицы
-        /// </summary>
-        string[] Filters { get; set; }
-
-        /// <summary>
-        /// Получить, собранную из документа, информацию
-        /// </summary>
-        List<T> Data { get; }
-
-        /// <summary>
-        /// Выполняет парсинг документа. Кэширует полученную информацию в свойство <see cref="Data"/>.
-        /// </summary>
-        /// <returns>Список из полученных строк/ячеек таблицы (Зависит от настроек конкретного парсера)</returns>
-        List<T>? Parse();
-    }
-
-    public abstract class Parser
+    public abstract class Parser<T> : IParsable<T>
     {
         protected Document _doc;
+        /// <inheritdoc/>
+        public abstract string[] Filters { get; set; }
+
+        /// <inheritdoc/>
+        public abstract List<T>? Data { get; }
+
+        /// <inheritdoc/>
+        public abstract List<T>? Parse();
 
         public Parser(Document document)
         {
@@ -194,13 +183,13 @@ namespace DocsParserLib
     /// <summary>
     /// Класс, представляющий парсер компетенций
     /// </summary>
-    public class CompetentionParser : Parser, IParsable<Competention>
+    public class CompetentionParser : Parser<Competention>
     {
         /// <inheritdoc/>
-        public string[] Filters { get; set; }
+        public override string[] Filters { get; set; }
 
         /// <inheritdoc/>
-        public List<Competention>? Data
+        public override List<Competention>? Data
         {
             get
             {
@@ -231,7 +220,7 @@ namespace DocsParserLib
         { }
 
         /// <inheritdoc/>
-        public List<Competention>? Parse()
+        public override List<Competention>? Parse()
         {
             Table? table = FindTableByTitle(Filters);
 
@@ -331,12 +320,12 @@ namespace DocsParserLib
     /// <summary>
     /// Класс, представляющий парсер вопросов
     /// </summary>
-    public class QuestionParser : Parser, IParsable<Question>
+    public class QuestionParser : Parser<Question>
     {
         /// <inheritdoc/>
-        public string[] Filters { get; set; }
+        public override string[] Filters { get; set; }
         /// <inheritdoc/>
-        public List<Question>? Data 
+        public override List<Question>? Data 
         {
             get
             {
@@ -376,7 +365,7 @@ namespace DocsParserLib
         {}
 
         /// <inheritdoc/>
-        public List<Question>? Parse()
+        public override List<Question>? Parse()
         {
             return ReadTable<Question>(Filters, (question_table, questions) =>
             {
@@ -419,12 +408,12 @@ namespace DocsParserLib
     /// <summary>
     /// Класс, представляющий парсер практических заданий
     /// </summary>
-    public class PracticTasksParser : Parser, IParsable<PracticTask>
+    public class PracticTasksParser : Parser<PracticTask>
     {
         /// <inheritdoc/>
-        public string[] Filters { get; set; }
+        public override string[] Filters { get; set; }
         /// <inheritdoc/>
-        public List<PracticTask>? Data 
+        public override List<PracticTask>? Data 
         { 
             get
             {
@@ -463,7 +452,7 @@ namespace DocsParserLib
         {}
 
         /// <inheritdoc/>
-        public List<PracticTask>? Parse()
+        public override List<PracticTask>? Parse()
         { 
             var result_tasks = ReadTable<PracticTask>(Filters,
                 (question_table, tasks) => {
